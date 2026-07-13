@@ -74,6 +74,12 @@ def run():
         max_attempts = int(job_data["max_attempts"])
         r.hset(job_key, "attempts", attempts)
 
+        current_status = r.hget(job_key, "status")
+        if current_status == "done":
+            print(f"[worker] {job_id} already done, skipping duplicate execution")
+            r.zrem("jobs:processing", job_id)
+            continue
+
         success = execute_job_with_heartbeat(job_id, job_data["type"], payload)
 
         r.zrem("jobs:processing", job_id)
