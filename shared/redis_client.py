@@ -1,4 +1,4 @@
 import redis
 
 def get_redis():
-    return redis.Redis(host="localhost", port=6379, decode_responses=True)
+    return redis.Redis(host="localhost", port=6379, decode_responses=True,socket_timeout=10,socket_keepalive=True)
