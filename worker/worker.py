@@ -8,16 +8,22 @@ import threading
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.redis_client import get_redis
 
+from handlers import HANDLERS
+
 r = get_redis()
 LEASE_DURATION = 15  # seconds
 
 def execute_job(job_id: str, job_type: str, payload: dict) -> bool:
     print(f"[worker] processing {job_id} ({job_type})")
     #time.sleep(random.uniform(1, 3))  # simulate work
-    time.sleep(17)  # simulate work longer than lease duration to test heartbeat
+    #time.sleep(17)  # simulate work longer than lease duration to test heartbeat
     if payload.get("force_fail"):  # simulate a failure if the payload contains "force_fail": True
         return False
-    return True
+    handler = HANDLERS.get(job_type)
+    if not handler:
+        print(f"[worker] no handler for job type: {job_type}")
+        return False
+    return handler(payload)
 
 def claim_job():
     job_id = r.rpoplpush("jobs:pending:high", "jobs:processing_temp")
