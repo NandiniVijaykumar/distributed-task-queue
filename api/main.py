@@ -14,9 +14,11 @@ def submit_job(job_create: JobCreate):
         "payload": json.dumps(job.payload),
         "status": job.status,
         "attempts": job.attempts,
-        "created_at": job.created_at
+        "max_attempts": job.max_attempts,
+        "priority": job.priority,
+        "created_at": job.created_at,
     })
-    r.lpush("jobs:pending", job.id)
+    r.lpush(f"jobs:pending:{job.priority}", job.id)
     return {"id": job.id, "status": job.status}
 
 @app.get("/jobs/{job_id}")

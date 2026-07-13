@@ -6,6 +6,7 @@ import time
 class JobCreate(BaseModel):
     type: Literal["resize_image", "send_email", "process_pdf"]
     payload: dict
+    priority: Literal["low", "high"] = "low"
 
 class Job(BaseModel):
     id: str
@@ -13,6 +14,8 @@ class Job(BaseModel):
     payload: dict
     status: str = "pending"
     attempts: int = 0
+    max_attempts: int = 3 # for retries
+    priority: Literal["low", "high"]
     created_at: float
 
 def new_job(job_create: JobCreate) -> Job:
@@ -20,5 +23,6 @@ def new_job(job_create: JobCreate) -> Job:
         id=str(uuid.uuid4()),
         type=job_create.type,
         payload=job_create.payload,
-        created_at=time.time()
+        created_at=time.time(),
+        priority=job_create.priority
     )

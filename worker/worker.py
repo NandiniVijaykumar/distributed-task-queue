@@ -16,18 +16,27 @@ def execute_job(job_id: str, job_type: str, payload: dict) -> bool:
         return False
     return True
 
+def claim_job():
+    result = r.rpoplpush("jobs:pending:high", "jobs:processing")
+    if result:
+        return result
+    try:
+        result = r.brpoplpush("jobs:pending:low", "jobs:processing", timeout=5)
+    except redis.exceptions.TimeoutError:
+        return None
+    return result
+
+def requeue_after_delay(job_id, priority, delay_seconds):
+    run_at = time.time() + delay_seconds
+    r.zadd("jobs:delayed", {job_id: run_at})
+
 def run():
     print("[worker] started")
     while True:
         print("[worker] waiting for jobs...")
-        # atomically move a job from pending to processing
-        try:
-            result = r.brpoplpush("jobs:pending", "jobs:processing", timeout=5)
-        except redis.exceptions.TimeoutError:
-            continue # socket timeout, loop again
-        if result is None:
-            continue  # no job available, loop again
-        job_id = result
+        job_id = claim_job()
+        if not job_id:
+            continue
 
         job_key = f"job:{job_id}"
         job_data = r.hgetall(job_key)
@@ -39,11 +48,26 @@ def run():
         r.hset(job_key, "status", "in_progress")
         payload = json.loads(job_data["payload"])
 
+        attempts = int(job_data["attempts"]) + 1
+        max_attempts = int(job_data["max_attempts"])
+
         success = execute_job(job_id, job_data["type"], payload)
 
-        r.hset(job_key, "status", "done" if success else "failed")
+        r.hset(job_key, "attempts", attempts)
         r.lrem("jobs:processing", 0, job_id)
-        print(f"[worker] finished {job_id}: {'done' if success else 'failed'}")
+        
+        if success:
+            r.hset(job_key, "status", "done")
+            print(f"[worker] {job_id} done")
+        elif attempts <= max_attempts:
+            backoff = 2 ** attempts  # exponential backoff in seconds
+            r.hset(job_key, "status", "pending")
+            print(f"[worker] {job_id} failed, retry {attempts}/{max_attempts} in {backoff}s")
+            requeue_after_delay(job_id, job_data.get("priority", "low"), backoff)
+        else:
+            r.hset(job_key, "status", "dead")
+            r.lpush("jobs:dead", job_id)
+            print(f"[worker] {job_id} exhausted retries, moved to dead letter")
 
 if __name__ == "__main__":
     run()
