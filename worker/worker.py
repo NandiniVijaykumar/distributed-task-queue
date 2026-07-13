@@ -21,7 +21,7 @@ def claim_job():
     if result:
         return result
     try:
-        result = r.brpoplpush("jobs:pending:low", "jobs:processing", timeout=5)
+        result = r.rpoplpush("jobs:pending:low", "jobs:processing")
     except redis.exceptions.TimeoutError:
         return None
     return result
