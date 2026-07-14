@@ -1,4 +1,16 @@
 import redis
+import os
+from shared.lua_scripts import (
+    CLAIM_JOB_SCRIPT, RENEW_LEASE_SCRIPT,
+    REAP_TO_DELAYED_SCRIPT, PROMOTE_DELAYED_SCRIPT
+)
 
 def get_redis():
-    return redis.Redis(host="localhost", port=6379, decode_responses=True,socket_timeout=10,socket_keepalive=True)
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    return redis.from_url(redis_url, decode_responses=True)
+
+r = get_redis()
+claim_job_script = r.register_script(CLAIM_JOB_SCRIPT)
+renew_lease_script = r.register_script(RENEW_LEASE_SCRIPT)
+reap_to_delayed_script = r.register_script(REAP_TO_DELAYED_SCRIPT)
+promote_delayed_script = r.register_script(PROMOTE_DELAYED_SCRIPT)

@@ -66,3 +66,8 @@ def list_recent_jobs(limit: int = 20):
 @app.get("/logs")
 def get_logs(limit: int = 30):
     return r.lrange("logs:scheduler", 0, limit - 1)
+
+@app.delete("/logs")
+def clear_logs():
+    r.delete("logs:scheduler")
+    return {"status": "cleared"}

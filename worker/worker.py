@@ -7,12 +7,12 @@ import threading
 import uuid
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.redis_client import get_redis
+from shared.redis_client import get_redis, claim_job_script, renew_lease_script
 
 from handlers import HANDLERS
 
 r = get_redis()
-LEASE_DURATION = 15  # seconds
+LEASE_DURATION = 5  # seconds
 
 WORKER_ID = str(uuid.uuid4())[:8]
 
@@ -33,25 +33,24 @@ def execute_job(job_id: str, job_type: str, payload: dict) -> bool:
     return handler(payload)
 
 def claim_job():
-    job_id = r.rpoplpush("jobs:pending:high", "jobs:processing_temp")
-    if not job_id:#?
-        try:
-            job_id = r.brpoplpush("jobs:pending:low", "jobs:processing_temp", timeout=5)
-        except redis.exceptions.TimeoutError:
-            return None
-    if job_id:
-        lease_time = time.time() + LEASE_DURATION
-        r.zadd("jobs:processing", {job_id: lease_time}) #?
-        r.lrem("jobs:processing_temp", 0, job_id)  # remove from temp list
+    lease_until = time.time() + LEASE_DURATION
+    job_id = claim_job_script(
+        keys=["jobs:pending:high", "jobs:pending:low", "jobs:processing"],
+        args=[lease_until]
+    )
     return job_id
 
 def execute_job_with_heartbeat(job_id, job_type, payload):
     stop_flag = threading.Event() #shared across threads
 
     def renew():
-        while not stop_flag.is_set(): #while heartbeat not stopped
-            r.zadd("jobs:processing", {job_id: time.time() + LEASE_DURATION}) #renew
-            stop_flag.wait(LEASE_DURATION / 2)  # renew at half the lease duration
+        while not stop_flag.is_set():
+            new_lease = time.time() + LEASE_DURATION
+            result = renew_lease_script(keys=["jobs:processing"], args=[job_id, new_lease])
+            if result == 0:
+                print(f"[worker] lease for {job_id} no longer valid")
+                break
+            stop_flag.wait(LEASE_DURATION / 2)
 
     t = threading.Thread(target=renew, daemon=True) # new thread to renew heartbeat
     t.start()
@@ -67,17 +66,24 @@ def requeue_after_delay(job_id, priority, delay_seconds):
 
 def run():
     print("[worker] started")
+    print("[worker] waiting for jobs...")
     while True:
-        print("[worker] waiting for jobs...")
         job_id = claim_job()
         if not job_id:
+            time.sleep(1)  # no jobs available, wait a bit
             continue
 
         job_key = f"job:{job_id}"
         job_data = r.hgetall(job_key)
         if not job_data:
             print(f"[worker] job {job_id} has no data, skipping")
-            r.zrem("jobs:processing", 0, job_id)
+            r.zrem("jobs:processing", job_id)
+            continue
+
+        current_status = r.hget(job_key, "status")
+        if current_status == "done":
+            print(f"[worker] {job_id} already done, skipping duplicate execution")
+            r.zrem("jobs:processing", job_id)
             continue
 
         r.hset(job_key, "status", "in_progress")
@@ -86,12 +92,6 @@ def run():
         attempts = int(job_data["attempts"]) + 1
         max_attempts = int(job_data["max_attempts"])
         r.hset(job_key, "attempts", attempts)
-
-        current_status = r.hget(job_key, "status")
-        if current_status == "done":
-            print(f"[worker] {job_id} already done, skipping duplicate execution")
-            r.zrem("jobs:processing", job_id)
-            continue
 
         success = execute_job_with_heartbeat(job_id, job_data["type"], payload)
 

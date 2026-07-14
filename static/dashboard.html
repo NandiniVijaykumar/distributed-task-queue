@@ -8,13 +8,37 @@
     .stat-box { background: #2a2a2a; padding: 15px 20px; border-radius: 6px; }
     .stat-label { font-size: 12px; color: #888; }
     .stat-value { font-size: 28px; font-weight: bold; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; font-size: 13px; }
+    .table-container {
+    height: 400px;
+    overflow-y: auto;
+    border: 1px solid #333;
+    }
+    table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    border: none;
+    }
+    th, td {
+    text-align: left;
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    }
+    th:nth-child(1), td:nth-child(1) { width: 15%; }
+    th:nth-child(2), td:nth-child(2) { width: 25%; }
+    th:nth-child(3), td:nth-child(3) { width: 25%; }
+    th:nth-child(4), td:nth-child(4) { width: 15%; }
+    th:nth-child(5), td:nth-child(5) { width: 20%; }
     th { color: #888; }
     .status-done { color: #4ade80; }
     .status-failed, .status-dead { color: #f87171; }
     .status-in_progress { color: #facc15; }
     .status-pending { color: #60a5fa; }
+    .status-delayed { color: #ed8b09; }
   </style>
 </head>
 <body>
@@ -23,11 +47,11 @@
   <h3>Recent Jobs</h3>
   <table>
     <thead>
-      <tr><th>ID</th><th>Type</th><th>Status</th><th>Priority</th><th>Attempts</th></tr>
+        <tr><th>ID</th><th>Type</th><th>Priority</th><th>Attempts</th><th>Status</th></tr>
     </thead>
     <tbody id="jobs"></tbody>
-  </table>
-  <h3>Scheduler / Reaper Log</h3>
+    </table>
+  <h3>Scheduler / Reaper Log <button onclick="clearLogs()" style="font-size:11px; margin-left:10px;">Clear</button> </h3>
   <pre id="logs" style="background:#111; padding:10px; height:200px; overflow-y:auto; font-size:12px;"></pre>
 
   <script>
@@ -49,11 +73,16 @@
         <tr>
           <td>${j.id.slice(0, 8)}</td>
           <td>${j.type}</td>
-          <td class="status-${j.status}">${j.status}</td>
           <td>${j.priority || "low"}</td>
           <td>${j.attempts}/${j.max_attempts}</td>
+          <td class="status-${j.status}">${j.status}</td>
         </tr>
       `).join("");
+    }
+
+    async function clearLogs() {
+        await fetch(`${API}/logs`, { method: "DELETE" });
+        refresh();
     }
 
     refresh();
