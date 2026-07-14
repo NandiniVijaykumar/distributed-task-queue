@@ -1,6 +1,7 @@
 from PIL import Image
 import os
 from pypdf import PdfReader
+import time
 
 def handle_resize_image(payload: dict) -> bool:
     input_path = payload.get("file")
@@ -38,8 +39,15 @@ def handle_process_pdf(payload: dict) -> bool:
         print(f"[handler] pdf processing failed: {e}")
         return False
 
+def handle_long_task(payload: dict) -> bool:
+    duration = payload.get("duration_seconds", 20)
+    print(f"[handler] simulating long task for {duration}s")
+    time.sleep(duration)
+    print(f"[handler] long task finished")
+    return True
 
 HANDLERS = {
     "resize_image": handle_resize_image,
     "process_pdf": handle_process_pdf,
+    "long_task": handle_long_task,
 }

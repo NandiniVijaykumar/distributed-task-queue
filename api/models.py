@@ -4,7 +4,7 @@ import uuid
 import time
 
 class JobCreate(BaseModel):
-    type: Literal["resize_image", "process_pdf"]
+    type: Literal["resize_image", "process_pdf","long_task"]
     payload: dict
     priority: Literal["low", "high"] = "low"
 

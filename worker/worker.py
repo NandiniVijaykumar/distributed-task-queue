@@ -4,6 +4,7 @@ import random
 import sys
 import os
 import threading
+import uuid
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.redis_client import get_redis
@@ -13,10 +14,16 @@ from handlers import HANDLERS
 r = get_redis()
 LEASE_DURATION = 15  # seconds
 
+WORKER_ID = str(uuid.uuid4())[:8]
+
+def worker_heartbeat():
+    while True:
+        r.set(f"worker:{WORKER_ID}", "alive", ex=2)  # expires in 10s if not renewed
+        time.sleep(1)  # renew well before expiry
+
+
 def execute_job(job_id: str, job_type: str, payload: dict) -> bool:
     print(f"[worker] processing {job_id} ({job_type})")
-    #time.sleep(random.uniform(1, 3))  # simulate work
-    #time.sleep(17)  # simulate work longer than lease duration to test heartbeat
     if payload.get("force_fail"):  # simulate a failure if the payload contains "force_fail": True
         return False
     handler = HANDLERS.get(job_type)
@@ -27,14 +34,14 @@ def execute_job(job_id: str, job_type: str, payload: dict) -> bool:
 
 def claim_job():
     job_id = r.rpoplpush("jobs:pending:high", "jobs:processing_temp")
-    if not job_id:
+    if not job_id:#?
         try:
             job_id = r.brpoplpush("jobs:pending:low", "jobs:processing_temp", timeout=5)
         except redis.exceptions.TimeoutError:
             return None
     if job_id:
         lease_time = time.time() + LEASE_DURATION
-        r.zadd("jobs:processing", {job_id: lease_time})
+        r.zadd("jobs:processing", {job_id: lease_time}) #?
         r.lrem("jobs:processing_temp", 0, job_id)  # remove from temp list
     return job_id
 
@@ -91,9 +98,9 @@ def run():
         r.zrem("jobs:processing", job_id)
         
         if success:
-            r.hset(job_key, "status", "done")
+            r.hset(job_key, "status", "done")#?
             print(f"[worker] {job_id} done")
-        elif attempts <= max_attempts:
+        elif attempts < max_attempts:#?
             backoff = 2 ** attempts  # exponential backoff in seconds
             r.hset(job_key, "status", "pending")
             print(f"[worker] {job_id} failed, retry {attempts}/{max_attempts} in {backoff}s")
@@ -104,4 +111,5 @@ def run():
             print(f"[worker] {job_id} exhausted retries, moved to dead letter")
 
 if __name__ == "__main__":
+    threading.Thread(target=worker_heartbeat, daemon=True).start()
     run()
