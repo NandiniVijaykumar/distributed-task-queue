@@ -1,7 +1,7 @@
 import redis
 import os
 from shared.lua_scripts import (
-    CLAIM_JOB_SCRIPT, RENEW_LEASE_SCRIPT,
+    CLAIM_JOB_SCRIPT, COMPLETE_JOB_SCRIPT, RENEW_LEASE_SCRIPT,
     REAP_SCRIPT, PROMOTE_DELAYED_SCRIPT
 )
 
@@ -11,6 +11,7 @@ def get_redis():
 
 r = get_redis()
 claim_job_script = r.register_script(CLAIM_JOB_SCRIPT)
+complete_job_script = r.register_script(COMPLETE_JOB_SCRIPT)
 renew_lease_script = r.register_script(RENEW_LEASE_SCRIPT)
-REAP_SCRIPT = r.register_script(REAP_SCRIPT)
+reap_script = r.register_script(REAP_SCRIPT)
 promote_delayed_script = r.register_script(PROMOTE_DELAYED_SCRIPT)

@@ -7,7 +7,7 @@ import threading
 import uuid
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.redis_client import get_redis, claim_job_script, renew_lease_script
+from shared.redis_client import get_redis, claim_job_script, complete_job_script, renew_lease_script
 
 from handlers import HANDLERS
 
@@ -60,10 +60,6 @@ def execute_job_with_heartbeat(job_id, job_type, payload):
         stop_flag.set()
     return result
 
-def requeue_after_delay(job_id, priority, delay_seconds):
-    run_at = time.time() + delay_seconds
-    r.zadd("jobs:delayed", {job_id: run_at})
-
 def run():
     print("[worker] started")
     print("[worker] waiting for jobs...")
@@ -92,22 +88,22 @@ def run():
         attempts = int(job_data["attempts"]) + 1
         max_attempts = int(job_data["max_attempts"])
         r.hset(job_key, "attempts", attempts)
-        
+
         success = execute_job_with_heartbeat(job_id, job_data["type"], payload)
 
-        r.zrem("jobs:processing", job_id)
-        
-        if success:
-            r.hset(job_key, "status", "done")#?
+        backoff = 3 ** attempts
+        run_at = time.time() + backoff
+
+        result = complete_job_script(
+            keys=["jobs:processing", "jobs:dead", "jobs:delayed"],
+            args=[job_id, "1" if success else "0", attempts, max_attempts, run_at]
+        )
+
+        if result == "done":
             print(f"[worker] {job_id} done")
-        elif attempts < max_attempts:#?
-            backoff = 2 ** attempts  # exponential backoff in seconds
-            r.hset(job_key, "status", "pending")
+        elif result == "retry":
             print(f"[worker] {job_id} failed, retry {attempts}/{max_attempts} in {backoff}s")
-            requeue_after_delay(job_id, job_data.get("priority", "low"), backoff)
         else:
-            r.hset(job_key, "status", "dead")
-            r.lpush("jobs:dead", job_id)
             print(f"[worker] {job_id} exhausted retries, moved to dead letter")
 
 if __name__ == "__main__":
