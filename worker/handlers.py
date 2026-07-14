@@ -40,7 +40,7 @@ def handle_process_pdf(payload: dict) -> bool:
         return False
 
 def handle_long_task(payload: dict) -> bool:
-    duration = payload.get("duration_seconds", 20)
+    duration = payload.get("duration_seconds", 3)
     print(f"[handler] simulating long task for {duration}s")
     time.sleep(duration)
     print(f"[handler] long task finished")

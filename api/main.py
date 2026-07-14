@@ -62,3 +62,7 @@ def list_recent_jobs(limit: int = 20):
             jobs.append(data)
     jobs.sort(key=lambda j: float(j["created_at"]), reverse=True)
     return jobs[:limit]
+
+@app.get("/logs")
+def get_logs(limit: int = 30):
+    return r.lrange("logs:scheduler", 0, limit - 1)

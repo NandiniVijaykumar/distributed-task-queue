@@ -27,6 +27,8 @@
     </thead>
     <tbody id="jobs"></tbody>
   </table>
+  <h3>Scheduler / Reaper Log</h3>
+  <pre id="logs" style="background:#111; padding:10px; height:200px; overflow-y:auto; font-size:12px;"></pre>
 
   <script>
     const API = "http://localhost:8000";
@@ -39,6 +41,8 @@
           <div class="stat-value">${v}</div>
         </div>
       `).join("");
+      const logs = await fetch(`${API}/logs`).then(r => r.json());
+      document.getElementById("logs").textContent = logs.join("\n");
 
       const jobs = await fetch(`${API}/jobs?limit=20`).then(r => r.json());
       document.getElementById("jobs").innerHTML = jobs.map(j => `

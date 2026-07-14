@@ -5,7 +5,7 @@ for i in range(1, 6):
     response = requests.post(
         "http://localhost:8000/jobs",
         json={
-            "type": "send_email",
+            "type": "long_task",
             "payload": {
                 "file": f"low{i}.png"
             },
@@ -20,7 +20,7 @@ for i in range(1, 6):
     response = requests.post(
         "http://localhost:8000/jobs",
         json={
-            "type": "resize_image",
+            "type": "long_task",
             "payload": {
                 "file": f"high{i}.png"
             },

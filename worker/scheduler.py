@@ -8,6 +8,12 @@ from shared.redis_client import get_redis
 
 r=get_redis()
 
+def log_event(message: str):
+    print(message)  # keep terminal output too
+    entry = f"{time.strftime('%H:%M:%S')} {message}"
+    r.lpush("logs:scheduler", entry)
+    r.ltrim("logs:scheduler", 0, 99)  # keep only last 100 entries
+    
 def promote_delayed_jobs():
     while True:
         now = time.time()
@@ -16,11 +22,11 @@ def promote_delayed_jobs():
             job_data = r.hgetall(f"job:{job_id}")
             if not job_data:
                 r.zrem("jobs:delayed", job_id)
-                print(f"[scheduler] job {job_id} has no data, skipping")
+                log_event(f"[scheduler] job {job_id} has no data, skipping")
                 continue
             priority = job_data.get("priority", "low")
             r.lpush(f"jobs:pending:{priority}", job_id)
-            print(f"[scheduler] promoted delayed job {job_id} to pending:{priority}")
+            log_event(f"[scheduler] promoted delayed job {job_id} to pending:{priority}")
             r.zrem("jobs:delayed", job_id)
         time.sleep(1)  # check every second
 
@@ -40,11 +46,11 @@ def reap_expired_jobs():
             if attempts < max_attempts:
                 r.hset(f"job:{job_id}", "status", "pending")
                 r.lpush(f"jobs:pending:{priority}", job_id)
-                print(f"[reaper] requeued abandoned job {job_id}")
+                log_event(f"[reaper] requeued abandoned job {job_id}")
             else:
                 r.hset(f"job:{job_id}", "status", "dead")
                 r.lpush("jobs:dead", job_id)
-                print(f"[reaper] {job_id} exceeded max attempts, moved to dead letter")
+                log_event(f"[reaper] {job_id} exceeded max attempts, moved to dead letter")
         time.sleep(1)  # check every second
 
 if __name__ == "__main__":
