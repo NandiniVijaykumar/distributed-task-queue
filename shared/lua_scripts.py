@@ -29,7 +29,7 @@ end
 return 0
 """
 
-REAP_TO_DELAYED_SCRIPT = """
+REAP_SCRIPT = """
 local processing_key = KEYS[1]
 local delayed_key = KEYS[2]
 local dead_key = KEYS[3]
@@ -43,8 +43,7 @@ for i, job_id in ipairs(expired) do
     local job_data_key = 'job:' .. job_id
     local attempts = tonumber(redis.call('HGET', job_data_key, 'attempts')) or 0
     local max_attempts = tonumber(redis.call('HGET', job_data_key, 'max_attempts')) or 3
-    attempts = attempts + 1
-    redis.call('HSET', job_data_key, 'attempts', attempts)
+    run_at = tonumber(run_at) + 3^attempts
 
     if attempts >= max_attempts then
         redis.call('HSET', job_data_key, 'status', 'dead')

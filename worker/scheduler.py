@@ -4,7 +4,7 @@ import os
 import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.redis_client import get_redis, reap_to_delayed_script, promote_delayed_script
+from shared.redis_client import get_redis, REAP_SCRIPT, promote_delayed_script
 
 r=get_redis()
 
@@ -25,8 +25,8 @@ def promote_delayed_jobs():
 def reap_expired_jobs():
     while True:
         now = time.time()
-        run_at = now + 3
-        expired = reap_to_delayed_script(keys=["jobs:processing", "jobs:delayed","jobs:dead"], args=[now, run_at])
+        run_at = now
+        expired = REAP_SCRIPT(keys=["jobs:processing", "jobs:delayed","jobs:dead"], args=[now, run_at])
         for job_id in expired:
             log_event(f"[reaper] {job_id} lease expired, moved to delayed queue")
         time.sleep(1)

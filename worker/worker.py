@@ -92,7 +92,7 @@ def run():
         attempts = int(job_data["attempts"]) + 1
         max_attempts = int(job_data["max_attempts"])
         r.hset(job_key, "attempts", attempts)
-
+        
         success = execute_job_with_heartbeat(job_id, job_data["type"], payload)
 
         r.zrem("jobs:processing", job_id)
