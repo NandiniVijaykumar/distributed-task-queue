@@ -94,15 +94,16 @@ def run():
 
         now = time.time()
 
-        result = complete_job_script(
+        result, run_at_str = complete_job_script(
             keys=["jobs:processing", "jobs:dead", "jobs:delayed"],
-            args=[job_id, "1" if success else "0", attempts, max_attempts, now, BACKOFF_BASE]
+            args=[job_id, "1" if success else "0", attempts, max_attempts, BACKOFF_BASE]
         )
 
         if result == "done":
             print(f"[worker] {job_id} done")
         elif result == "retry":
-            print(f"[worker] {job_id} failed, retry {attempts}/{max_attempts} in {backoff}s")
+            run_at = float(run_at_str)
+            print(f"[worker] {job_id} failed, retry {attempts}/{max_attempts} (in {run_at - time.time():.1f}s)")
         else:
             print(f"[worker] {job_id} exhausted retries, moved to dead letter")
 
