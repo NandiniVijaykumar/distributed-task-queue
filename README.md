@@ -8,7 +8,7 @@ This isn't a wrapper around an existing queue library - the queueing, leasing, a
 
 ## What it does
 
-- Accepts jobs via a REST API (`POST /jobs`), each with a type, payload, and priority
+- Accepts jobs via a REST API (`POST /jobs`), each with a type, payload, priority and max retry count
 - Workers claim jobs atomically - no two workers can ever process the same job
 - Failed jobs retry with exponential backoff, up to a configurable limit, then move to a dead-letter queue
 - High-priority jobs are processed before low-priority ones
@@ -75,7 +75,7 @@ open static/dashboard.html     # polls the API every 2s
 
 ## API
 
-- `POST /jobs` - submit a job: `{"type": "resize_image", "payload": {...}, "priority": "high"}`
+- `POST /jobs` — submit a job: `{"type": "resize_image", "payload": {...}, "priority": "high", "max_attempts": 5}` (max_attempts optional, defaults to 3, bounded 1-10)
 - `GET /jobs/{id}` - check a job's status
 - `GET /jobs?limit=20` - list recent jobs
 - `GET /stats` - queue depths, dead-letter count, workers online
@@ -87,9 +87,11 @@ open static/dashboard.html     # polls the API every 2s
 
 **Atomicity via Lua scripts.** Claiming a job, completing a job (removing from `jobs:processing` and routing to done/retry/dead), and reaping expired leases are each implemented as single Redis Lua scripts rather than sequences of separate commands. Redis executes a script as one atomic unit, so there's no window where another process can observe or interfere with a partially-applied state change (e.g., a job removed from the processing set but not yet marked `done`).
 
+**max_attempts is client-configurable but bounded (1-10),** enforced via Pydantic's `Field(ge=1, le=10)` at the API layer. An unbounded, fully client-controlled retry limit would let a caller set it high enough to effectively defeat dead-letter routing, letting a failing job retry indefinitely and starve other jobs of worker time. A fixed bound avoids that while still giving callers real control.
+
 ## Limitations
 
-**The completion race is a fundamental limitation** Even with atomic scripts, there remains a gap between "worker finishes executing a job" and "worker successfully calls the atomic completion script." If the worker process dies in that window, the reaper will still see an expired lease and requeue the job - meaning it can genuinely run twice. This is the classic **at-least-once delivery** problem. The mitigation here is an idempotency check (a job whose status is already `done` is skipped rather than re-executed), which covers the common case but doesn't eliminate the narrow window where a crash happens after work completes but before the status write lands. A fully correct fix would require the job handlers themselves to be idempotent (e.g., safe to run twice), this project's handlers (image resize, PDF read) happen to be naturally idempotent, but that's a property of the handlers, not a guarantee the queue provides.
+**The completion race is a fundamental limitation.** Even with atomic scripts, there remains a gap between "worker finishes executing a job" and "worker successfully calls the atomic completion script." If the worker process dies in that window, the reaper will still see an expired lease and requeue the job - meaning it can genuinely run twice. This is the classic **at-least-once delivery** problem. The mitigation here is an idempotency check (a job whose status is already `done` is skipped rather than re-executed), which covers the common case but doesn't eliminate the narrow window where a crash happens after work completes but before the status write lands. A fully correct fix would require the job handlers themselves to be idempotent (e.g., safe to run twice), this project's handlers (image resize, PDF read) happen to be naturally idempotent, but that's a property of the handlers, not a guarantee the queue provides.
 
 **`GET /jobs` uses `KEYS job:*`,** an O(n) full-keyspace scan.
 
