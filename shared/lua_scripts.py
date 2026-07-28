@@ -1,3 +1,11 @@
+BACKOFF_BASE = 3
+
+_BACKOFF_FN = """
+local function compute_backoff(base, attempts)
+    return base ^ attempts
+end
+"""
+
 CLAIM_JOB_SCRIPT = """
 local high_key = KEYS[1]
 local low_key = KEYS[2]
@@ -17,7 +25,7 @@ redis.call('HSET', 'job:' .. job_id, 'status', 'in_progress')
 return job_id
 """
 
-COMPLETE_JOB_SCRIPT = """
+COMPLETE_JOB_SCRIPT = _BACKOFF_FN + """
 local processing_key = KEYS[1]
 local dead_key = KEYS[2]
 local delayed_key = KEYS[3]
@@ -25,7 +33,8 @@ local job_id = ARGV[1]
 local success = ARGV[2]
 local attempts = tonumber(ARGV[3])
 local max_attempts = tonumber(ARGV[4])
-local run_at = ARGV[5]
+local now = tonumber(ARGV[5])
+local base = tonumber(ARGV[6])
 
 local job_data_key = 'job:' .. job_id
 redis.call('ZREM', processing_key, job_id)
@@ -34,6 +43,7 @@ if success == '1' then
     redis.call('HSET', job_data_key, 'status', 'done')
     return 'done'
 elseif attempts < max_attempts then
+    local run_at = now + compute_backoff(base, attempts)
     redis.call('HSET', job_data_key, 'status', 'delayed')
     redis.call('ZADD', delayed_key, run_at, job_id)
     return 'retry'
@@ -56,12 +66,12 @@ end
 return 0
 """
 
-REAP_SCRIPT = """
+REAP_SCRIPT = _BACKOFF_FN + """
 local processing_key = KEYS[1]
 local delayed_key = KEYS[2]
 local dead_key = KEYS[3]
-local now = ARGV[1]
-local run_at = ARGV[2]
+local now = tonumber(ARGV[1])
+local base = tonumber(ARGV[2])
 
 local expired = redis.call('ZRANGEBYSCORE', processing_key, 0, now)
 local results = {}
@@ -70,14 +80,14 @@ for i, job_id in ipairs(expired) do
     local job_data_key = 'job:' .. job_id
     local attempts = tonumber(redis.call('HGET', job_data_key, 'attempts')) or 0
     local max_attempts = tonumber(redis.call('HGET', job_data_key, 'max_attempts')) or 3
-    run_at = tonumber(run_at) + 3^attempts
-    
+
     if attempts >= max_attempts then
         redis.call('HSET', job_data_key, 'status', 'dead')
         redis.call('LPUSH', dead_key, job_id)
         table.insert(results, job_id)
         table.insert(results, 'dead')
     else
+        local run_at = now + compute_backoff(base, attempts)
         redis.call('ZADD', delayed_key, run_at, job_id)
         redis.call('HSET', job_data_key, 'status', 'delayed')
         table.insert(results, job_id)

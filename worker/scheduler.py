@@ -5,6 +5,7 @@ import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.redis_client import get_redis, reap_script, promote_delayed_script
+from shared.lua_scripts import BACKOFF_BASE
 
 r=get_redis()
 
@@ -25,8 +26,7 @@ def promote_delayed_jobs():
 def reap_expired_jobs():
     while True:
         now = time.time()
-        run_at = now
-        results = reap_script(keys=["jobs:processing", "jobs:delayed", "jobs:dead"], args=[now, run_at])
+        results = reap_script(keys=["jobs:processing", "jobs:delayed", "jobs:dead"], args=[now, BACKOFF_BASE])
         for i in range(0, len(results), 2):
             job_id = results[i]
             outcome = results[i + 1]

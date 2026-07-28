@@ -8,6 +8,7 @@ import uuid
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.redis_client import get_redis, claim_job_script, complete_job_script, renew_lease_script
+from shared.lua_scripts import BACKOFF_BASE
 
 from handlers import HANDLERS
 
@@ -91,12 +92,11 @@ def run():
 
         success = execute_job_with_heartbeat(job_id, job_data["type"], payload)
 
-        backoff = 3 ** attempts
-        run_at = time.time() + backoff
+        now = time.time()
 
         result = complete_job_script(
             keys=["jobs:processing", "jobs:dead", "jobs:delayed"],
-            args=[job_id, "1" if success else "0", attempts, max_attempts, run_at]
+            args=[job_id, "1" if success else "0", attempts, max_attempts, now, BACKOFF_BASE]
         )
 
         if result == "done":
