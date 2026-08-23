@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'task-queue-api'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: /metrics
+
+  - job_name: 'task-queue-worker'
+    static_configs:
+      - targets: ['host.docker.internal:8001']
+        # add more targets here if you run additional workers,
+        # e.g. 'host.docker.internal:8003'
+
+  - job_name: 'task-queue-scheduler'
+    static_configs:
+      - targets: ['host.docker.internal:8002']

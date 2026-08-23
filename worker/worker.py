@@ -5,12 +5,19 @@ import sys
 import os
 import threading
 import uuid
+from prometheus_client import start_http_server
+from metrics import (
+    jobs_completed_total, jobs_failed_total,
+    job_duration_seconds, job_queue_wait_seconds,
+    jobs_retried_total, jobs_dead_total,
+)
+
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.redis_client import get_redis, claim_job_script, complete_job_script, renew_lease_script
 from shared.lua_scripts import BACKOFF_BASE
 
-from handlers import HANDLERS
+from worker.handlers import HANDLERS
 
 r = get_redis()
 LEASE_DURATION = 5  # seconds
@@ -55,10 +62,12 @@ def execute_job_with_heartbeat(job_id, job_type, payload):
 
     t = threading.Thread(target=renew, daemon=True) # new thread to renew heartbeat
     t.start()
+    start = time.time()
     try:
         result = execute_job(job_id, job_type, payload)
     finally:
         stop_flag.set()
+        job_duration_seconds.labels(type=job_type).observe(time.time() - start)
     return result
 
 def run():
@@ -77,6 +86,10 @@ def run():
             r.zrem("jobs:processing", job_id)
             continue
 
+        job_queue_wait_seconds.labels(priority=job_data.get("priority", "low")).observe(
+            time.time() - float(job_data["created_at"])
+        )
+
         current_status = r.hget(job_key, "status")
         if current_status == "done":
             print(f"[worker] {job_id} already done, skipping duplicate execution")
@@ -92,6 +105,11 @@ def run():
 
         success = execute_job_with_heartbeat(job_id, job_data["type"], payload)
 
+        if success:
+            jobs_completed_total.labels(type=job_data["type"]).inc()
+        else:
+            jobs_failed_total.labels(type=job_data["type"]).inc()
+            
         now = time.time()
 
         result, run_at_str = complete_job_script(
@@ -102,11 +120,14 @@ def run():
         if result == "done":
             print(f"[worker] {job_id} done")
         elif result == "retry":
+            jobs_retried_total.labels(type=job_data["type"]).inc()
             run_at = float(run_at_str)
             print(f"[worker] {job_id} failed, retry {attempts}/{max_attempts} (in {run_at - time.time():.1f}s)")
         else:
+            jobs_dead_total.labels(type=job_data["type"]).inc()
             print(f"[worker] {job_id} exhausted retries, moved to dead letter")
 
 if __name__ == "__main__":
+    start_http_server(8001)  # bump per instance: 8001, 8002, ... or make configurable via env var
     threading.Thread(target=worker_heartbeat, daemon=True).start()
     run()

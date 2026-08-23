@@ -4,7 +4,7 @@ import uuid
 import time
 
 class JobCreate(BaseModel):
-    type: Literal["resize_image", "process_pdf","long_task"]
+    type: Literal["resize_image", "process_pdf", "long_task", "noop"]
     payload: dict
     priority: Literal["low", "high"] = "low"
     max_attempts: int = Field(default=3, ge=1, le=10)
@@ -18,6 +18,7 @@ class Job(BaseModel):
     max_attempts: int = Field(default=3, ge=1, le=10)
     priority: Literal["low", "high"]
     created_at: float
+    completed_at: Optional[float] = None
 
 def new_job(job_create: JobCreate) -> Job:
     return Job(

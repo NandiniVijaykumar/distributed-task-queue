@@ -46,8 +46,12 @@ def handle_long_task(payload: dict) -> bool:
     print(f"[handler] long task finished")
     return True
 
+def handle_noop(payload: dict) -> bool:
+    return True
+
 HANDLERS = {
     "resize_image": handle_resize_image,
     "process_pdf": handle_process_pdf,
     "long_task": handle_long_task,
+    "noop": handle_noop,
 }

@@ -41,7 +41,10 @@ local job_data_key = 'job:' .. job_id
 redis.call('ZREM', processing_key, job_id)
 
 if success == '1' then
+    local t = redis.call('TIME')
+    local completed_at = tonumber(t[1])
     redis.call('HSET', job_data_key, 'status', 'done')
+    redis.call('HSET', job_data_key, 'completed_at', completed_at)
     return {'done', ''}
 elseif attempts < max_attempts then
     local run_at = compute_backoff(base, attempts)

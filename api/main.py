@@ -3,6 +3,8 @@ import json
 from .models import JobCreate, Job, new_job
 from shared.redis_client import get_redis
 from fastapi.middleware.cors import CORSMiddleware
+from metrics import jobs_submitted_total
+from prometheus_client import make_asgi_app
 
 app = FastAPI()
 r = get_redis()
@@ -27,6 +29,7 @@ def submit_job(job_create: JobCreate):
         "created_at": job.created_at,
     })
     r.lpush(f"jobs:pending:{job.priority}", job.id)
+    jobs_submitted_total.labels(type=job.type, priority=job.priority).inc()
     return {"id": job.id, "status": job.status}
 
 @app.get("/jobs/{job_id}")
@@ -71,3 +74,5 @@ def get_logs(limit: int = 30):
 def clear_logs():
     r.delete("logs:scheduler")
     return {"status": "cleared"}
+
+app.mount("/metrics", make_asgi_app())
