@@ -1,19 +1,4 @@
-"""
-load_test.py — fire a burst of mixed jobs at the task queue API so the
-Prometheus metrics / Grafana dashboards actually have something to show:
-queue depth spiking then draining, retries, dead-letters, and a spread
-of job durations.
-
-Usage:
-    python3 load_test.py                # defaults below
-    python3 load_test.py --count 200 --api http://localhost:8000
-
-While this runs, watch:
-    curl -s -L localhost:8000/stats
-    curl -s -L localhost:8001/metrics | grep job_duration_seconds
-    curl -s -L localhost:8002/metrics | grep queue_depth
-or just watch the dashboard / Grafana panels update live.
-"""
+#python3 load_test.py --count 150 --rate 15
 
 import argparse
 import json
@@ -37,17 +22,13 @@ def submit_job(api: str, job: dict) -> dict:
 
 
 def make_job() -> dict:
-    """Pick a random job shape: mostly normal, some slow, some forced failures."""
     roll = random.random()
     priority = random.choice(["high", "low"])
 
     if roll < 0.55:
-        # fast no-op — bulk of "normal" traffic
         return {"type": "noop", "payload": {}, "priority": priority}
 
     elif roll < 0.75:
-        # slow job — stretches job_duration_seconds and queue_wait for
-        # whatever's stuck behind it, good for seeing backlog build up
         return {
             "type": "long_task",
             "payload": {"duration_seconds": random.randint(2, 6)},
@@ -55,9 +36,6 @@ def make_job() -> dict:
         }
 
     elif roll < 0.9:
-        # forced failure — will retry with backoff, eventually may dead-letter
-        # depending on max_attempts, exercises jobs_failed_total /
-        # jobs_retried_total / jobs_dead_total
         return {
             "type": "noop",
             "payload": {"force_fail": True},

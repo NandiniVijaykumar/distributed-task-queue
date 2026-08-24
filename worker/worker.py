@@ -128,6 +128,6 @@ def run():
             print(f"[worker] {job_id} exhausted retries, moved to dead letter")
 
 if __name__ == "__main__":
-    start_http_server(8001)  # bump per instance: 8001, 8002, ... or make configurable via env var
+    start_http_server(8001)
     threading.Thread(target=worker_heartbeat, daemon=True).start()
     run()
